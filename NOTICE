@@ -1,0 +1,18 @@
+perchlight-keys
+Copyright (c) 2026 Matthew Pitts. MIT licence (see LICENSE).
+
+This repository includes code derived from the following third-party work:
+
+samples/csharp/PerchlightKeys/Ed25519.cs
+  Ed25519 signature verification, ported to C# from TweetNaCl version
+  20140427 (https://tweetnacl.cr.yp.to/) by Daniel J. Bernstein, Bernard van
+  Gastel, Wesley Janssen, Tanja Lange, Peter Schwabe and Sjaak Smetsers.
+  TweetNaCl is in the public domain. The port keeps TweetNaCl's arithmetic
+  function by function; it adds an S < L check (RFC 8032 section 5.1.7) and
+  uses .NET's SHA-512.
+
+src/lib/mail/resend.js, src/lib/mail/common.js
+  Copied from perchlight-list (same author, MIT).
+
+samples/vectors/rfc8032.json
+  Includes the test vectors of RFC 8032 section 7.1 (IETF; test keys only).

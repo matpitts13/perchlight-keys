@@ -1,0 +1,39 @@
+# Copy to .dev.vars for local development (`npm run dev`). Never commit .dev.vars.
+# In production, set each one with:  npx wrangler secret put <NAME>
+
+# Required. 16+ random characters (openssl rand -hex 32). Protects /api/*.
+ADMIN_TOKEN=
+
+# Required. From `npm run keygen`: JSON {kid: base64 PKCS#8 Ed25519 private key}, and the kid that signs.
+SIGNING_KEYS=
+ACTIVE_KID=
+
+# Required. 32+ random characters each. A plain string, or JSON {kid: secret} with *_ACTIVE naming the current one (rotation).
+KEY_LOOKUP_SECRET=
+KEY_ENC_SECRET=
+# KEY_LOOKUP_ACTIVE=
+# KEY_ENC_ACTIVE=
+
+# Optional. Salt for hashing IP addresses and email addresses in rate-limit rows (defaults to KEY_LOOKUP_SECRET).
+# IP_SALT=
+
+# Email (Resend). MAIL_FROM is a var in wrangler.jsonc.
+RESEND_API_KEY=
+
+# Stripe: the webhook signing secret; optionally a restricted key (Checkout Sessions: read) to map by line-item price.
+# STRIPE_WEBHOOK_SECRET=whsec_...
+# STRIPE_SECRET_KEY=rk_...
+
+# Lemon Squeezy: the webhook signing secret; an API key for the admin re-sync.
+# LEMONSQUEEZY_WEBHOOK_SECRET=
+# LEMONSQUEEZY_API_KEY=
+
+# Gumroad: the secret part of your Ping URL (22+ URL-safe characters) and an API access token (both required).
+# GUMROAD_PING_TOKEN=
+# GUMROAD_ACCESS_TOKEN=
+
+# itch.io: an API key with the game:view:purchases scope.
+# ITCH_API_KEY=
+
+# Only if KEY_ENC_SECRET was lost: "1" lets "resend my keys" replace keys it can't decrypt.
+# RESEND_REISSUE=

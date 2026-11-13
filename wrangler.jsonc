@@ -1,0 +1,46 @@
+// perchlight-keys: one Worker + one D1 database. No Durable Object.
+// Secrets are never set here. Locally they go in .dev.vars (see .dev.vars.example);
+// in production: npx wrangler secret put <NAME>
+// Keep your own copy with your database_id as wrangler.mine.jsonc (gitignored)
+// and deploy with -c wrangler.mine.jsonc, so this file stays generic.
+//
+// No cron trigger, on purpose: email retries and housekeeping run lazily on
+// incoming requests (docs/SDD.md, "Lazy housekeeping").
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "perchlight-keys",
+  "main": "src/index.js",
+  "compatibility_date": "2026-11-01",
+
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "perchlight-keys",
+      "migrations_dir": "migrations"
+    }
+  ],
+
+  "vars": {
+    // This deployment's public URL, e.g. https://keys.example.com. Empty = the request's origin.
+    "PUBLIC_URL": "",
+    // The sender for key emails, on a domain verified with your mail provider, e.g. "My Store <keys@example.com>".
+    "MAIL_FROM": "",
+    // resend (v0.1). SES, Mailgun and Postmark can be copied in from perchlight-list.
+    "MAIL_PROVIDER": "resend",
+    // The most "resend my keys" emails a day, to protect the mail provider's free quota.
+    "RESEND_DAILY_CAP": "200",
+    // Your Lemon Squeezy store id (for the admin re-sync) and Gumroad seller id (checked on every sale lookup).
+    "LEMONSQUEEZY_STORE_ID": "",
+    "GUMROAD_SELLER_ID": "",
+    // Signing key ids you've withdrawn after a compromise, e.g. ["k2025"]: listed in /v1/keys and /v1/revocations.
+    "REVOKED_KIDS": "[]"
+  }
+
+  // OPTIONAL, NOT VERIFIED ON THE FREE PLAN: the Workers rate-limiting binding.
+  // Its docs don't say whether it is on Free; the isolate and D1 limits are the
+  // protection without it. Not wired in v0.1.
+  // "ratelimits": [{ "name": "LIMITER", "namespace_id": "1002", "simple": { "limit": 60, "period": 60 } }]
+
+  // Your own domain, once it works on workers.dev:
+  // "routes": [{ "pattern": "keys.example.com", "custom_domain": true }]
+}

@@ -1,0 +1,28 @@
+{
+  "products": {
+    "myapp": {
+      "name": "My App",
+      "prefix": "MYAPP",
+      "editions": {
+        "standard": { "features": ["core"] },
+        "pro": { "features": ["core", "export", "plugins"] }
+      },
+      "defaultEdition": "standard",
+      "deviceLimit": 3,
+      "duration": "perpetual",
+      "trialDays": 14,
+      "activation": "device",
+      "leaseDays": 30,
+      "renewAfterDays": 23,
+      "graceDays": 7,
+      "map": {
+        "stripe": { "price_REPLACE_ME": "standard" },
+        "lemonsqueezy": { "REPLACE_VARIANT_ID": "standard" },
+        "gumroad": { "REPLACE_PRODUCT_ID": "standard" },
+        "itch": { "REPLACE_GAME_ID": "standard" }
+      }
+    }
+  },
+  "refunds": { "stripe": "full-only", "lemonsqueezy": "full-only", "gumroad": "full-only" },
+  "disputes": "revoke"
+}

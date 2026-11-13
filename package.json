@@ -1,0 +1,62 @@
+{
+  "name": "perchlight-keys",
+  "version": "0.1.0",
+  "private": true,
+  "description": "A free, self-hosted licence-key service on Cloudflare Workers + D1: issues keys from Stripe, Lemon Squeezy, Gumroad and itch.io, signs offline-checkable Ed25519 licence files and device leases. No cron trigger.",
+  "license": "MIT",
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler d1 migrations apply DB --remote && wrangler deploy",
+    "test": "vitest run",
+    "test:csharp": "dotnet run --project samples/csharp/Tests",
+    "keygen": "node scripts/keygen.mjs",
+    "import": "node scripts/import.mjs",
+    "vectors": "node scripts/make-vectors.mjs"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "cloudflare": {
+    "bindings": {
+      "ADMIN_TOKEN": {
+        "description": "Required. A long random string (16+ characters), e.g. from `openssl rand -hex 32`. Protects the admin API (/api/*)."
+      },
+      "SIGNING_KEYS": {
+        "description": "Required. JSON {kid: base64 PKCS#8 Ed25519 private key}. Make one with `npm run keygen`; embed the printed public key in your app."
+      },
+      "ACTIVE_KID": {
+        "description": "Required. The kid in SIGNING_KEYS that signs new licence files and leases."
+      },
+      "KEY_LOOKUP_SECRET": {
+        "description": "Required. 32+ random characters. HMAC secret for looking keys up without storing them."
+      },
+      "KEY_ENC_SECRET": {
+        "description": "Required. 32+ random characters. AES-GCM secret for the encrypted key copies used by 'resend my keys'."
+      },
+      "RESEND_API_KEY": {
+        "description": "Needed to email keys. A Resend (resend.com) API key; MAIL_FROM must be on a domain verified there."
+      },
+      "STRIPE_WEBHOOK_SECRET": {
+        "description": "Optional. The whsec_... signing secret of your Stripe webhook endpoint (/v1/webhooks/stripe)."
+      },
+      "LEMONSQUEEZY_WEBHOOK_SECRET": {
+        "description": "Optional. The signing secret of your Lemon Squeezy webhook (/v1/webhooks/lemonsqueezy)."
+      },
+      "GUMROAD_PING_TOKEN": {
+        "description": "Optional. 22+ random URL-safe characters: the secret path part of your Gumroad Ping URL. Needs GUMROAD_ACCESS_TOKEN too."
+      },
+      "GUMROAD_ACCESS_TOKEN": {
+        "description": "Optional. A Gumroad API access token; every ping is checked by looking the sale up with it."
+      },
+      "ITCH_API_KEY": {
+        "description": "Optional. An itch.io API key with the game:view:purchases scope, for the /claim/itch page."
+      }
+    }
+  },
+  "devDependencies": {
+    "@cloudflare/vitest-plugin": "^1.6.1",
+    "vitest": "^5.1.0",
+    "wrangler": "^4.159.0"
+  }
+}

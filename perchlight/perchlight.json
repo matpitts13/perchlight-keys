@@ -1,0 +1,102 @@
+{
+  "$schema": "https://perchlight.ravenburst.com/schema/v1.json",
+  "version": 1,
+  "views": [
+    {
+      "id": "keys-products",
+      "title": "Products",
+      "source": { "type": "d1", "database": "YOUR-D1-DATABASE-ID", "table": "products" },
+      "columns": [
+        { "label": "Product", "from": "name" },
+        { "label": "Id", "from": "id" },
+        { "label": "Key prefix", "from": "prefix" },
+        { "label": "Devices", "from": "device_limit", "type": "number" },
+        { "label": "Length (days; blank = perpetual)", "from": "duration_days", "type": "number" },
+        { "label": "Trial (days)", "from": "trial_days", "type": "number" },
+        { "label": "Activation", "from": "activation", "type": "enum", "options": ["device", "none"] },
+        { "label": "Lease (days)", "from": "lease_days", "type": "number" },
+        { "label": "Grace (days)", "from": "grace_days", "type": "number" },
+        { "label": "Editions", "from": "editions", "type": "json", "hidden": true }
+      ]
+    },
+    {
+      "id": "keys-licenses",
+      "title": "Licences",
+      "source": { "type": "d1", "database": "YOUR-D1-DATABASE-ID", "table": "licenses" },
+      "columns": [
+        { "label": "Email", "from": "email" },
+        { "label": "Product", "from": "product_id" },
+        { "label": "Edition", "from": "edition" },
+        { "label": "Source", "from": "source", "type": "enum", "options": ["stripe", "lemonsqueezy", "gumroad", "itch", "manual", "import"] },
+        { "label": "Status", "from": "status", "type": "enum", "options": ["active", "revoked", "expired"] },
+        { "label": "Flags", "from": "flags" },
+        { "label": "Device limit (blank = product's)", "from": "device_limit", "type": "number" },
+        { "label": "Created", "from": "created_at", "type": "date" },
+        { "label": "Expires (blank = never)", "from": "expires_at", "type": "date" },
+        { "label": "Revoked reason", "from": "revoked_reason", "hidden": true },
+        { "label": "Order / sale id", "from": "source_ref", "hidden": true },
+        { "label": "Name", "from": "name", "hidden": true },
+        { "label": "Notes", "from": "notes", "editable": true, "hidden": true },
+        { "label": "Pending action", "from": "action_requested", "hidden": true },
+        { "label": "Id", "from": "id", "hidden": true }
+      ],
+      "actions": [
+        { "label": "Revoke", "confirm": true, "set": { "action_requested": "revoke" } },
+        { "label": "Unrevoke", "confirm": true, "set": { "action_requested": "unrevoke" } },
+        { "label": "Extend 30 days", "set": { "action_requested": "extend_30" } },
+        { "label": "Extend 365 days", "set": { "action_requested": "extend_365" } },
+        { "label": "Re-send email", "set": { "action_requested": "resend" } },
+        { "label": "Free all devices", "confirm": true, "set": { "action_requested": "free_all" } }
+      ]
+    },
+    {
+      "id": "keys-activations",
+      "title": "Activations",
+      "source": { "type": "d1", "database": "YOUR-D1-DATABASE-ID", "table": "activations" },
+      "columns": [
+        { "label": "Licence", "from": "license_id" },
+        { "label": "Product", "from": "product_id" },
+        { "label": "Kind", "from": "kind", "type": "enum", "options": ["full", "trial"] },
+        { "label": "Label", "from": "label" },
+        { "label": "First seen", "from": "first_at", "type": "date" },
+        { "label": "Last seen", "from": "last_seen_at", "type": "date" },
+        { "label": "Freed", "from": "deactivated_at", "type": "date" },
+        { "label": "Trial ends", "from": "expires_at", "type": "date", "hidden": true },
+        { "label": "Id", "from": "id", "hidden": true }
+      ],
+      "actions": [{ "label": "Free device", "confirm": true, "set": { "free_requested": 1 } }]
+    },
+    {
+      "id": "keys-events",
+      "title": "Webhook events",
+      "source": { "type": "d1", "database": "YOUR-D1-DATABASE-ID", "table": "webhook_events" },
+      "columns": [
+        { "label": "Provider", "from": "provider", "type": "enum", "options": ["stripe", "lemonsqueezy", "gumroad"] },
+        { "label": "Type", "from": "type" },
+        { "label": "Result", "from": "result", "type": "enum", "options": ["issued", "duplicate", "unmapped", "pending_target", "applied", "ignored", "error", "dropped", "reprocess_requested", "processing"] },
+        { "label": "Received", "from": "received_at", "type": "date" },
+        { "label": "Licence", "from": "license_id" },
+        { "label": "Error", "from": "error" },
+        { "label": "Waiting for", "from": "target_ref", "hidden": true },
+        { "label": "Event id", "from": "event_id", "hidden": true }
+      ],
+      "actions": [{ "label": "Re-process", "set": { "result": "reprocess_requested" } }]
+    },
+    {
+      "id": "keys-deliveries",
+      "title": "Emails",
+      "source": { "type": "d1", "database": "YOUR-D1-DATABASE-ID", "table": "deliveries" },
+      "columns": [
+        { "label": "Kind", "from": "kind", "type": "enum", "options": ["key_issued", "resend", "refund_notice"] },
+        { "label": "Status", "from": "status", "type": "enum", "options": ["pending", "sending", "sent", "retry", "failed", "unknown", "retry_requested"] },
+        { "label": "Attempts", "from": "attempts", "type": "number" },
+        { "label": "Last error", "from": "last_error" },
+        { "label": "Created", "from": "created_at", "type": "date" },
+        { "label": "Sent", "from": "sent_at", "type": "date" },
+        { "label": "To", "from": "email", "hidden": true },
+        { "label": "Licence", "from": "license_id", "hidden": true }
+      ],
+      "actions": [{ "label": "Try again", "set": { "status": "retry_requested" } }]
+    }
+  ]
+}
