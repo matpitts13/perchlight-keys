@@ -8,3 +8,6 @@
 - **No throttle on failed admin auth** (`src/routes/admin.js`). The 16-character minimum is the only guard against guessing. Fix: an isolate-memory counter per IP hash on 401s. Found in the v0.1 review.
 - **Resend with RESEND_REISSUE=1 re-issues keys one by one** (`src/lib/deliveries.js` `keyFor`), up to 20 licences, each a D1 write; a large list can run out of budget mid-build and waste a retry attempt (no loop). Fix: batch the re-key updates. Found in the v0.1 review.
 - **`POST /api/rekey` reports `more: true` forever if undecryptable rows fill a batch.** Fix: skip rows already counted as failed (cursor by id). Found in the v0.1 review.
+- **Trial per-IP limit counts repeat calls** (`src/routes/licensing.js`). The 10-an-hour isolate counter counts every `/v1/trial` call, so several devices behind one NAT re-checking their trials can get a 429 without writing rows. Fix: count only calls that insert a row. Found in the v0.1 re-review (2026-11-12).
+- **Lemon Squeezy `paused` maps to reactivate** (`src/routes/webhooks.js`), which can revive an expired licence. Fix: ignore `paused`, or treat it as set_expiry. Found in the v0.1 re-review.
+- **A stuck pending_target re-claim is released to `error`, not back to `pending_target`** (`src/lib/sweep.js`). Harmless (admin can re-process it). Found in the v0.1 re-review.
