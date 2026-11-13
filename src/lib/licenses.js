@@ -92,8 +92,8 @@ export function newEvent(provider, eventId, type, bodyHash) {
 export async function claimExisting(app, provider, eventId, allowed) {
   const claim = randomToken();
   const r = await app.db
-    .prepare(`UPDATE webhook_events SET claim = ?, result = 'processing' WHERE provider = ? AND event_id = ? AND result IN (${allowed.map(() => "?").join(",")})`)
-    .bind(claim, provider, eventId, ...allowed)
+    .prepare(`UPDATE webhook_events SET claim = ?, claimed_at = ?, result = 'processing' WHERE provider = ? AND event_id = ? AND result IN (${allowed.map(() => "?").join(",")})`)
+    .bind(claim, app.now, provider, eventId, ...allowed)
     .run();
   if (!r.meta.changes) return null;
   const row = await app.db.prepare("SELECT * FROM webhook_events WHERE provider = ? AND event_id = ?").bind(provider, eventId).first();
@@ -178,7 +178,8 @@ export function opSql(op, { reason = null, flag = null, expiresAt = null }, now)
     case "expire":
       return { set: "status = 'expired', updated_at = ?", args: [now], where: "status = 'active'" };
     case "reactivate":
-      return { set: "status = 'active', expires_at = ?, updated_at = ?", args: [expiresAt, now], where: "status IN ('active', 'expired')" };
+      // A missing new end keeps the old one: never turns a subscription perpetual.
+      return { set: "status = 'active', expires_at = COALESCE(?, expires_at), updated_at = ?", args: [expiresAt, now], where: "status IN ('active', 'expired')" };
     case "set_expiry":
       return { set: "expires_at = ?, updated_at = ?", args: [expiresAt, now], where: "status != 'revoked'" };
     case "flag":
@@ -300,7 +301,15 @@ export async function runIntent(app, ev, intent) {
     expiresAt: intent.expiresAt ?? (m.product.duration === "perpetual" ? null : app.now + m.product.duration * 86_400_000),
   };
   const r = await issue(app, spec, ev, intent);
-  if (r.status === "issued") await applyPending(app, intent.provider, [intent.sourceRef, ...(intent.refs ?? [])]);
+  if (r.status === "issued") {
+    // The licence is stored: a failure here must not turn the answer into a 503
+    // (the store would retry a done event and the email would wait for the sweep).
+    try {
+      await applyPending(app, intent.provider, [intent.sourceRef, ...(intent.refs ?? [])]);
+    } catch (err) {
+      console.error(`applyPending: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
   return { result: r.status === "issued" ? "issued" : r.status === "existing" ? "duplicate" : "duplicate_event", license: r.license, deliveryId: r.deliveryId };
 }
 
@@ -318,11 +327,53 @@ export async function applyPending(app, provider, refs) {
   for (const { event_id } of rows) {
     const ev = await claimExisting(app, provider, event_id, ["pending_target"]);
     if (!ev) continue;
-    const intent = JSON.parse(ev.action ?? "null");
-    if (intent?.kind === "act") {
+    try {
+      const intent = parseIntent(ev.action);
+      if (intent?.kind !== "act") {
+        await releaseClaim(app, ev, "pending_target", null);
+        continue;
+      }
       await actOnLicense(app, ev, intent, intent);
       n++;
+    } catch (err) {
+      await releaseClaim(app, ev, "pending_target", null).catch(() => {});
+      throw err;
     }
   }
   return n;
+}
+
+export function parseIntent(action) {
+  try {
+    const v = JSON.parse(action ?? "null");
+    return v && typeof v === "object" ? v : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Gives a claimed event back (after a failure), so it can be re-processed later. */
+export async function releaseClaim(app, ev, result, error) {
+  await app.db
+    .prepare("UPDATE webhook_events SET result = ?, error = ?, claim = NULL, claimed_at = NULL WHERE provider = ? AND event_id = ? AND claim = ?")
+    .bind(result, error ? String(error).slice(0, 200) : null, ev.provider, ev.eventId, ev.claim)
+    .run();
+}
+
+/**
+ * Re-processes a claimed event; on any failure the event goes back to
+ * 'error' (re-processable) instead of staying 'processing'.
+ */
+export async function reprocessClaimed(app, ev) {
+  const intent = parseIntent(ev.action);
+  if (!intent) {
+    await releaseClaim(app, ev, "error", "nothing stored to re-process");
+    return { result: "error" };
+  }
+  try {
+    return await runIntent(app, ev, intent);
+  } catch (err) {
+    await releaseClaim(app, ev, "error", `re-process: ${err instanceof Error ? err.message : String(err)}`).catch(() => {});
+    throw err;
+  }
 }

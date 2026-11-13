@@ -214,8 +214,8 @@ describe("Lemon Squeezy", () => {
     const sub = (name, attrs) => ({ meta: { event_name: name }, data: { type: "subscriptions", id: "s1", attributes: { order_id: 7001, ...attrs } } });
     await lemonSend(sub("subscription_cancelled", { ends_at: "2026-04-01T00:00:00Z", updated_at: "a" }));
     expect((await rows("SELECT expires_at FROM licenses WHERE source_ref = '7001'"))[0].expires_at).toBe(Date.parse("2026-04-01T00:00:00Z"));
-    await lemonSend(sub("subscription_resumed", { updated_at: "b" }));
-    expect((await rows("SELECT expires_at, status FROM licenses WHERE source_ref = '7001'"))[0]).toEqual({ expires_at: null, status: "active" });
+    await lemonSend(sub("subscription_resumed", { status: "active", renews_at: "2026-05-01T00:00:00Z", updated_at: "b" }));
+    expect((await rows("SELECT expires_at, status FROM licenses WHERE source_ref = '7001'"))[0]).toEqual({ expires_at: Date.parse("2026-05-01T00:00:00Z"), status: "active" });
     await lemonSend(sub("subscription_expired", { updated_at: "c" }));
     expect((await rows("SELECT status FROM licenses WHERE source_ref = '7001'"))[0].status).toBe("expired");
   });

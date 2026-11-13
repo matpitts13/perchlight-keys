@@ -3,12 +3,12 @@
 // list; POST /api/licenses/:id/reveal decrypts one.
 import { aesDecrypt, aesEncrypt, ct, encKid } from "../lib/crypto.js";
 import { fail, json, normEmail, parseJson, readJson, str } from "../lib/http.js";
-import { encSecrets, issue, keyHmac, lookupSecrets, claimExisting, runIntent, newEvent } from "../lib/licenses.js";
+import { encSecrets, issue, keyHmac, lookupSecrets, claimExisting, runIntent, newEvent, parseIntent, releaseClaim, reprocessClaimed } from "../lib/licenses.js";
 import { licenseAction } from "../lib/actions.js";
 import { sendDelivery, sendDue } from "../lib/deliveries.js";
 import { PROVIDERS } from "../lib/config.js";
 import { lemonOrders, TransientError } from "../lib/providers.js";
-import { gumroadSync, lemonIntent, SALE_ID_RE, settle } from "./webhooks.js";
+import { gumroadSync, lemonIntent, SALE_ID_RE } from "./webhooks.js";
 import { claimSweep, runSweep } from "../lib/sweep.js";
 import { flushFootprint } from "../lib/footprint.js";
 import { signingConfig } from "../lib/tokens.js";
@@ -261,12 +261,13 @@ export async function handleAdmin(request, app, path) {
     if ((g = /^events\/(stripe|lemonsqueezy|gumroad)\/(.{1,200})\/reprocess$/.exec(path)) && m === "POST") {
       const ev = await claimExisting(app, g[1], decodeURIComponent(g[2]), ["unmapped", "error", "reprocess_requested", "dropped"]);
       if (!ev) return fail(409, "not_reprocessable", "Only unmapped, error and dropped events can be re-processed.");
-      const intent = JSON.parse(ev.action ?? "null");
-      if (!intent) {
-        await app.db.prepare("UPDATE webhook_events SET result = 'error', error = 'nothing stored to re-process', claim = NULL WHERE provider = ? AND event_id = ?").bind(g[1], ev.eventId).run();
+      if (!parseIntent(ev.action)) {
+        await releaseClaim(app, ev, "error", "nothing stored to re-process");
         return fail(409, "not_reprocessable", "Nothing stored to re-process.");
       }
-      return json(await settle(app, ev, intent));
+      const r = await reprocessClaimed(app, ev); // on a throw the event is back to 'error'
+      if (r.deliveryId) app.waitUntil(sendDelivery(app, r.deliveryId));
+      return json(r);
     }
     if (m === "GET" && path === "deliveries") {
       const st = q.get("status");

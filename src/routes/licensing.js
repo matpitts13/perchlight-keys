@@ -229,6 +229,8 @@ async function trial(app, request) {
   if (!prod.trialDays) return fail(404, "no_trial", "This product has no trial.");
   if (!device || !DEVICE_RE.test(device)) return fail(400, "bad_device", "device must be 16-128 characters of A-Z, a-z, 0-9, _ or -.");
   if (await limited(app, request, `trial:${prod.id}:${device}`)) return tooMany();
+  // Each new device id writes a row: at most 10 new trials an hour per IP (isolate memory).
+  if (!memoryHit(`trial-ip:${await ipHash(app, request)}`, 10, app.now, 3_600_000)) return tooMany();
   const [, sel] = await app.db.batch([
     app.db
       .prepare(

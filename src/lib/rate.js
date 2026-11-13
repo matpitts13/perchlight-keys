@@ -20,8 +20,12 @@ export function memoryHit(key, limit, now, windowMs = 60_000) {
   const start = Math.floor(now / windowMs) * windowMs;
   const w = windows.get(key);
   if (!w || w.start !== start) {
-    if (windows.size >= MAX_KEYS) windows = new Map();
-    windows.set(key, { start, n: 1 });
+    if (windows.size >= MAX_KEYS) {
+      // Drop finished windows first; clear everything only if all are current.
+      for (const [k, v] of windows) if (v.start + v.ms <= now) windows.delete(k);
+      if (windows.size >= MAX_KEYS) windows = new Map();
+    }
+    windows.set(key, { start, n: 1, ms: windowMs });
     return true;
   }
   w.n++;

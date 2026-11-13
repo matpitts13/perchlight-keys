@@ -140,7 +140,17 @@ export function lemonIntent(app, body) {
         ? { kind: "act", refSource: "lemonsqueezy", ref: asStr(a.order_id), op: "set_expiry", expiresAt: ms(a.ends_at) ?? app.now }
         : { kind: "ignore", why: "no order_id" };
     case "subscription_resumed":
-      return asStr(a.order_id) ? { kind: "act", refSource: "lemonsqueezy", ref: asStr(a.order_id), op: "reactivate", expiresAt: null } : { kind: "ignore", why: "no order_id" };
+    case "subscription_updated": {
+      // Active again (or renewed): the licence runs to the next renewal date; a
+      // missing date keeps the current expiry (never turns it perpetual).
+      const ref = asStr(a.order_id);
+      if (!ref) return { kind: "ignore", why: "no order_id" };
+      if (["active", "on_trial", "past_due", "paused"].includes(a.status) || name === "subscription_resumed")
+        return { kind: "act", refSource: "lemonsqueezy", ref, op: "reactivate", expiresAt: ms(a.renews_at) };
+      if (a.status === "cancelled") return { kind: "act", refSource: "lemonsqueezy", ref, op: "set_expiry", expiresAt: ms(a.ends_at) ?? app.now };
+      if (a.status === "expired" || a.status === "unpaid") return { kind: "act", refSource: "lemonsqueezy", ref, op: "expire" };
+      return { kind: "ignore", why: `subscription status ${a.status}` };
+    }
     default:
       return { kind: "ignore", why: "event type not used" };
   }
@@ -214,6 +224,7 @@ async function lemonsqueezy(app, request) {
   }
   const name = asStr(data?.meta?.event_name) ?? asStr(request.headers.get("X-Event-Name"));
   if (!name || !asStr(data?.data?.id)) return fail(400, "bad_event", "No event name or data.id.");
+  if (!data.meta || typeof data.meta !== "object") data.meta = {};
   data.meta.event_name = name;
   // No delivery id or timestamp is documented: the event id is the event name,
   // the object id and its updated_at, so a replayed body is a duplicate and a

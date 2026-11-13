@@ -3,7 +3,8 @@ import { aesDecrypt, hmacHex, sortableId } from "../lib/crypto.js";
 import { escapeHtml, json, normEmail, page, readInput } from "../lib/http.js";
 import { deliveryStmt, encSecrets, issue } from "../lib/licenses.js";
 import { sendDelivery } from "../lib/deliveries.js";
-import { d1Hits, ipHash } from "../lib/rate.js";
+import { d1Hits, ipHash, memoryHit } from "../lib/rate.js";
+import { expiryFor } from "../lib/config.js";
 import { itchDownloadKey, TransientError } from "../lib/providers.js";
 
 const MIN = 60_000;
@@ -31,6 +32,9 @@ async function emailBucket(app, email) {
 
 export async function resendWork(app, request, email) {
   const ip = await ipHash(app, request);
+  // Isolate-memory pre-filter before any D1 write, so a flood of random
+  // addresses from one IP can't spend the free D1 write quota on rate rows.
+  if (!memoryHit(`rs:${ip}`, 10, app.now, HOUR)) return "limited";
   const buckets = [{ bucket: `rs:ip:${ip}`, windowMs: HOUR, limit: 10 }];
   if (email) {
     const e = await emailBucket(app, email);
@@ -112,7 +116,7 @@ export async function handleClaim(request, app) {
   }
   if (!found) return claimForm(app, GENERIC);
   const ref = String(found.id);
-  const r = await issue(app, { product: prod, edition, email, source: "itch", sourceRef: ref, refs: [{ source: "itch", ref }], sendEmail: true });
+  const r = await issue(app, { product: prod, edition, email, source: "itch", sourceRef: ref, refs: [{ source: "itch", ref }], expiresAt: expiryFor(prod, app.now), sendEmail: true });
   let key = r.key;
   let deliveryId = r.deliveryId;
   if (r.status !== "issued") {

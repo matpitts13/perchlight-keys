@@ -10,8 +10,7 @@ import { sendDelivery, sendDue } from "./deliveries.js";
 import { left } from "./budget.js";
 import { flushFootprint } from "./footprint.js";
 import { syncProducts } from "./products.js";
-import { claimExisting, runIntent } from "./licenses.js";
-import { parseJson } from "./http.js";
+import { claimExisting, reprocessClaimed } from "./licenses.js";
 
 export const SWEEP_EVERY_MS = 5 * 60_000;
 const DAY = 86_400_000;
@@ -54,26 +53,28 @@ export async function runSweep(app) {
   for (const e of evs) {
     if (left(app.budget) < 14) break;
     const ev = await claimExisting(app, e.provider, e.event_id, ["reprocess_requested"]);
-    const intent = ev && parseJson(ev.action, null);
     if (!ev) continue;
-    if (!intent) {
-      await app.db.prepare("UPDATE webhook_events SET result = 'error', error = 'nothing stored to re-process', claim = NULL WHERE provider = ? AND event_id = ?").bind(e.provider, e.event_id).run();
-      continue;
-    }
     try {
-      const r = await runIntent(app, ev, intent);
+      const r = await reprocessClaimed(app, ev); // releases the claim as 'error' on failure
       if (r.deliveryId) await sendDelivery(app, r.deliveryId);
       out.actions++;
     } catch (err) {
-      await app.db
-        .prepare("UPDATE webhook_events SET result = 'error', error = ?, claim = NULL WHERE provider = ? AND event_id = ? AND claim = ?")
-        .bind(`re-process: ${String(err?.message ?? err).slice(0, 150)}`, e.provider, e.event_id, ev.claim)
-        .run();
+      console.error(`sweep re-process: ${err instanceof Error ? err.message : String(err)}`);
     }
   }
   if (left(app.budget) > 10) {
+    // Claims interrupted mid-way (an evicted isolate) go back to 'error', re-processable.
+    const stuck = await app.db
+      .prepare("UPDATE webhook_events SET result = 'error', error = 'interrupted while re-processing', claim = NULL, claimed_at = NULL WHERE result = 'processing' AND claimed_at < ?")
+      .bind(app.now - 10 * 60_000)
+      .run();
+    out.actions += stuck.meta.changes;
+  }
+  if (left(app.budget) > 10) {
     const freed = await app.db
-      .prepare("UPDATE activations SET deactivated_at = ?, free_requested = 0 WHERE free_requested = 1 AND deactivated_at IS NULL AND kind = 'full'")
+      .prepare(
+        "UPDATE activations SET deactivated_at = CASE WHEN kind = 'full' AND deactivated_at IS NULL THEN ? ELSE deactivated_at END, free_requested = 0 WHERE free_requested = 1",
+      )
       .bind(app.now)
       .run();
     out.actions += freed.meta.changes;

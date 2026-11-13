@@ -24,8 +24,11 @@ export async function licenseAction(app, id, op, args = {}) {
       let exp;
       if (args.perpetual === true) exp = null;
       else if (Number.isFinite(args.expiresAt)) exp = args.expiresAt;
-      else if (Number.isInteger(args.days) && args.days > 0 && args.days <= 36500) exp = Math.max(lic.expires_at ?? app.now, app.now) + args.days * DAY;
-      else return { ok: false, error: "bad_request" };
+      else if (Number.isInteger(args.days) && args.days > 0 && args.days <= 36500) {
+        // Extending a perpetual licence by days would make it expire: leave it perpetual.
+        if (lic.expires_at == null) return { ok: true, changed: false, expires_at: null };
+        exp = Math.max(lic.expires_at, app.now) + args.days * DAY;
+      } else return { ok: false, error: "bad_request" };
       const changed = await run(
         "UPDATE licenses SET expires_at = ?, status = CASE WHEN status = 'expired' THEN 'active' ELSE status END, updated_at = ? WHERE id = ?",
         exp,

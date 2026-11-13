@@ -33,18 +33,22 @@ export async function flushFootprint(rawDb, now, force = false) {
   pending = new Map();
   const stmts = [];
   for (const [day, m] of batch) {
-    const entries = [...m.entries()].filter(([k]) => METRIC_RE.test(k));
-    if (!entries.length) continue;
-    // Metric names are fixed identifiers from this code (checked above), never input; the numbers are bound.
-    const obj = entries.map(([k]) => `'${k}', ?`).join(", ");
-    const sets = entries.map(([k]) => `'$.${k}', COALESCE(json_extract(footprint.data, '$.${k}'), 0) + ?`).join(", ");
-    const nums = entries.map(([, n]) => n);
-    stmts.push(
-      rawDb
-        .prepare(`INSERT INTO footprint (day, data) VALUES (?, json_object(${obj})) ON CONFLICT (day) DO UPDATE SET data = json_set(footprint.data, ${sets})`)
-        .bind(day, ...nums, ...nums),
-    );
+    const all = [...m.entries()].filter(([k]) => METRIC_RE.test(k));
+    // D1 allows 100 bound parameters per statement: 2 per metric, so at most 40 per statement.
+    for (let i = 0; i < all.length; i += 40) {
+      const entries = all.slice(i, i + 40);
+      // Metric names are fixed identifiers from this code (checked above), never input; the numbers are bound.
+      const obj = entries.map(([k]) => `'${k}', ?`).join(", ");
+      const sets = entries.map(([k]) => `'$.${k}', COALESCE(json_extract(footprint.data, '$.${k}'), 0) + ?`).join(", ");
+      const nums = entries.map(([, n]) => n);
+      stmts.push(
+        rawDb
+          .prepare(`INSERT INTO footprint (day, data) VALUES (?, json_object(${obj})) ON CONFLICT (day) DO UPDATE SET data = json_set(footprint.data, ${sets})`)
+          .bind(day, ...nums, ...nums),
+      );
+    }
   }
+  if (!stmts.length) return;
   try {
     const res = await rawDb.batch(stmts);
     // The flush's own row counts next time.

@@ -71,6 +71,7 @@ CREATE TABLE activations (
 CREATE UNIQUE INDEX activations_active ON activations (license_id, device_hash) WHERE deactivated_at IS NULL AND kind = 'full';
 CREATE UNIQUE INDEX activations_trial ON activations (product_id, device_hash) WHERE kind = 'trial';
 CREATE INDEX activations_license ON activations (license_id, deactivated_at);
+CREATE INDEX activations_free ON activations (free_requested) WHERE free_requested = 1;
 
 CREATE TABLE webhook_events (
   provider TEXT NOT NULL,
@@ -84,10 +85,13 @@ CREATE TABLE webhook_events (
   error TEXT,
   body_sha256 TEXT,
   claim TEXT,                      -- per-attempt nonce (claim-then-act)
+  claimed_at INTEGER,              -- when a re-process claimed it (stuck claims are released by the sweep)
   PRIMARY KEY (provider, event_id)
 );
 CREATE INDEX webhook_events_result ON webhook_events (result, received_at);
 CREATE INDEX webhook_events_target ON webhook_events (provider, target_ref) WHERE result = 'pending_target';
+CREATE INDEX webhook_events_received ON webhook_events (received_at);
+CREATE INDEX webhook_events_processing ON webhook_events (claimed_at) WHERE result = 'processing';
 
 CREATE TABLE deliveries (
   id TEXT PRIMARY KEY,

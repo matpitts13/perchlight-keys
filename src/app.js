@@ -11,11 +11,16 @@ import { handleWebhook } from "./routes/webhooks.js";
 import { handleResend, handleClaim } from "./routes/buyer.js";
 import { handleAdmin } from "./routes/admin.js";
 
+// A fixed set of metric names: never built from the request path, so a flood
+// of random paths can't grow the counters (or the flush statement).
+const ROUTES = new Set(["activate", "renew", "deactivate", "license", "trial", "revocations", "keys", "resend"]);
+const HOOKS = new Set(["stripe", "lemonsqueezy", "gumroad"]);
 function routeName(path) {
-  if (path.startsWith("/v1/webhooks/")) return `webhook_${path.split("/")[3]}`;
-  if (path.startsWith("/v1/")) return path.slice(4).replace(/\W/g, "_");
+  const p = path.split("/");
+  if (path.startsWith("/v1/webhooks/")) return HOOKS.has(p[3]) ? `webhook_${p[3]}` : "other";
+  if (path.startsWith("/v1/")) return ROUTES.has(p[2]) && p.length === 3 ? p[2] : "other";
   if (path.startsWith("/api/")) return "admin";
-  if (path.startsWith("/claim/")) return "claim";
+  if (path === "/claim/itch") return "claim";
   return "other";
 }
 
